@@ -1,15 +1,5 @@
 package com.countrypicker;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Currency;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-
-import org.json.JSONObject;
-
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Bundle;
@@ -26,235 +16,272 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.EditText;
 import android.widget.ListView;
 
+import org.json.JSONObject;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Currency;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+
 public class CountryPicker extends DialogFragment implements
-		Comparator<Country> {
-	/**
-	 * View components
-	 */
-	private EditText searchEditText;
-	private ListView countryListView;
+        Comparator<Country> {
+    /**
+     * View components
+     */
+    private EditText searchEditText;
+    private ListView countryListView;
 
-	/**
-	 * Adapter for the listview
-	 */
-	private CountryListAdapter adapter;
+    /**
+     * Adapter for the listview
+     */
+    private CountryListAdapter adapter;
 
-	/**
-	 * Hold all countries, sorted by country name
-	 */
-	private List<Country> allCountriesList;
+    /**
+     * Hold all countries, sorted by country name
+     */
+    private List<Country> allCountriesList;
 
-	/**
-	 * Hold countries that matched user query
-	 */
-	private List<Country> selectedCountriesList;
+    /**
+     * Hold countries that matched user query
+     */
+    private List<Country> selectedCountriesList;
 
-	/**
-	 * Listener to which country user selected
-	 */
-	private CountryPickerListener listener;
+    /**
+     * Listener to which country user selected
+     */
+    private CountryPickerListener listener;
 
-	/**
-	 * Set listener
-	 * 
-	 * @param listener
-	 */
-	public void setListener(CountryPickerListener listener) {
-		this.listener = listener;
-	}
+    /**
+     * Set listener
+     *
+     * @param listener
+     */
+    public void setListener(CountryPickerListener listener) {
+        this.listener = listener;
+    }
 
-	public EditText getSearchEditText() {
-		return searchEditText;
-	}
+    public EditText getSearchEditText() {
+        return searchEditText;
+    }
 
-	public ListView getCountryListView() {
-		return countryListView;
-	}
+    public ListView getCountryListView() {
+        return countryListView;
+    }
 
-	/**
-	 * Convenient function to get currency code from country code currency code
-	 * is in English locale
-	 * 
-	 * @param countryCode
-	 * @return
-	 */
-	public static Currency getCurrencyCode(String countryCode) {
-		try {
-			return Currency.getInstance(new Locale("en", countryCode));
-		} catch (Exception e) {
+    /**
+     * Convenient function to get currency code from country code currency code
+     * is in English locale
+     *
+     * @param countryCode
+     * @return
+     */
+    public static Currency getCurrencyCode(String countryCode) {
+        try {
+            return Currency.getInstance(new Locale("en", countryCode));
+        } catch (Exception e) {
 
-		}
-		return null;
-	}
+        }
+        return null;
+    }
 
-	/**
-	 * Get all countries with code and name from res/raw/countries.json
-	 * 
-	 * @return
-	 */
-	private List<Country> getAllCountries() {
-		if (allCountriesList == null) {
-			try {
-				allCountriesList = new ArrayList<Country>();
+    /**
+     * Get all countries with code and name from res/raw/countries.json
+     *
+     * @return
+     */
+    private List<Country> getAllCountries() {
+        if (allCountriesList == null) {
+            try {
+                allCountriesList = new ArrayList<Country>();
 
-				// Read from local file
-				String allCountriesString = readFileAsString(getActivity());
-				Log.d("countrypicker", "country: " + allCountriesString);
-				JSONObject jsonObject = new JSONObject(allCountriesString);
-				Iterator<?> keys = jsonObject.keys();
+                // Read from local file
+                String allCountriesString = readFileAsString(getActivity(), R.string.countries);
+                String allPhoneString = readFileAsString(getActivity(), R.string.phones);
+                Log.d("countrypicker", "country: " + allCountriesString);
+                Log.d("countrypicker", "phones: " + allPhoneString);
 
-				// Add the data to all countries list
-				while (keys.hasNext()) {
-					String key = (String) keys.next();
-					Country country = new Country();
-					country.setCode(key);
-					country.setName(jsonObject.getString(key));
-					allCountriesList.add(country);
-				}
+                JSONObject jsonObject = new JSONObject(allCountriesString);
+                JSONObject jsonPhoneCode = new JSONObject(allPhoneString);
 
-				// Sort the all countries list based on country name
-				Collections.sort(allCountriesList, this);
+                Iterator<?> keys = jsonObject.keys();
 
-				// Initialize selected countries with all countries
-				selectedCountriesList = new ArrayList<Country>();
-				selectedCountriesList.addAll(allCountriesList);
+                // Add the data to all countries list
+                while (keys.hasNext()) {
+                    String key = (String) keys.next();
+                    Country country = new Country();
+                    country.setCode(key);
+                    country.setName(jsonObject.getString(key));
+                    try {
+                        country.setPhoneCode("" + jsonPhoneCode.getInt(key));
+                        allCountriesList.add(country);
+                    } catch (Exception e) {
+                        // skip
+                    }
+                }
 
-				// Return
-				return allCountriesList;
+                // Sort the all countries list based on country name
+                Collections.sort(allCountriesList, this);
 
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		return null;
-	}
+                // Initialize selected countries with all countries
+                selectedCountriesList = new ArrayList<Country>();
+                selectedCountriesList.addAll(allCountriesList);
 
-	/**
-	 * R.string.countries is a json string which is Base64 encoded to avoid
-	 * special characters in XML. It's Base64 decoded here to get original json.
-	 * 
-	 * @param context
-	 * @return
-	 * @throws java.io.IOException
-	 */
-	private static String readFileAsString(Context context)
-			throws java.io.IOException {
-		String base64 = context.getResources().getString(R.string.countries);
-		byte[] data = Base64.decode(base64, Base64.DEFAULT);
-		return new String(data, "UTF-8");
-	}
+                // Return
+                return allCountriesList;
 
-	/**
-	 * To support show as dialog
-	 * 
-	 * @param dialogTitle
-	 * @return
-	 */
-	public static CountryPicker newInstance(String dialogTitle) {
-		CountryPicker picker = new CountryPicker();
-		Bundle bundle = new Bundle();
-		bundle.putString("dialogTitle", dialogTitle);
-		picker.setArguments(bundle);
-		return picker;
-	}
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return null;
+    }
 
-	/**
-	 * Create view
-	 */
-	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container,
-			Bundle savedInstanceState) {
-		// Inflate view
-		View view = inflater.inflate(R.layout.country_picker, null);
+    /**
+     * R.string.countries is a json string which is Base64 encoded to avoid
+     * special characters in XML. It's Base64 decoded here to get original json.
+     *
+     * @param context
+     * @return
+     * @throws java.io.IOException
+     */
+    private static String readFileAsString(Context context, int rId)
+            throws java.io.IOException {
+        String base64 = context.getResources().getString(rId);
+        byte[] data = Base64.decode(base64, Base64.DEFAULT);
+        return new String(data, "UTF-8");
+    }
 
-		// Get countries from the json
-		getAllCountries();
+    /**
+     * To support show as dialog
+     *
+     * @param dialogTitle
+     * @return
+     */
+    public static CountryPicker newInstance(String dialogTitle) {
+        CountryPicker picker = new CountryPicker();
+        Bundle bundle = new Bundle();
+        bundle.putString("dialogTitle", dialogTitle);
+        picker.setArguments(bundle);
+        return picker;
+    }
 
-		// Set dialog title if show as dialog
-		Bundle args = getArguments();
-		if (args != null) {
-			String dialogTitle = args.getString("dialogTitle");
-			getDialog().setTitle(dialogTitle);
+    /**
+     * Create view
+     */
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        // Inflate view
+        View view = inflater.inflate(R.layout.country_picker, null);
 
-			int width = getResources().getDimensionPixelSize(
-					R.dimen.cp_dialog_width);
-			int height = getResources().getDimensionPixelSize(
-					R.dimen.cp_dialog_height);
-			getDialog().getWindow().setLayout(width, height);
-		}
+        // Get countries from the json
+        getAllCountries();
 
-		// Get view components
-		searchEditText = (EditText) view
-				.findViewById(R.id.country_picker_search);
-		countryListView = (ListView) view
-				.findViewById(R.id.country_picker_listview);
+        // Set dialog title if show as dialog
+        Bundle args = getArguments();
+        if (args != null) {
+            String dialogTitle = args.getString("dialogTitle");
+            getDialog().setTitle(dialogTitle);
 
-		// Set adapter
-		adapter = new CountryListAdapter(getActivity(), selectedCountriesList);
-		countryListView.setAdapter(adapter);
+            int width = getResources().getDimensionPixelSize(
+                    R.dimen.cp_dialog_width);
+            int height = getResources().getDimensionPixelSize(
+                    R.dimen.cp_dialog_height);
+            getDialog().getWindow().setLayout(width, height);
+        }
 
-		// Inform listener
-		countryListView.setOnItemClickListener(new OnItemClickListener() {
+        // Get view components
+        searchEditText = (EditText) view
+                .findViewById(R.id.country_picker_search);
+        countryListView = (ListView) view
+                .findViewById(R.id.country_picker_listview);
 
-			@Override
-			public void onItemClick(AdapterView<?> parent, View view,
-					int position, long id) {
-				if (listener != null) {
-					Country country = selectedCountriesList.get(position);
-					listener.onSelectCountry(country.getName(),
-							country.getCode());
-				}
-			}
-		});
+        // Set adapter
+        adapter = new CountryListAdapter(getActivity(), selectedCountriesList);
+        countryListView.setAdapter(adapter);
 
-		// Search for which countries matched user query
-		searchEditText.addTextChangedListener(new TextWatcher() {
+        // Inform listener
+        countryListView.setOnItemClickListener(new OnItemClickListener() {
 
-			@Override
-			public void onTextChanged(CharSequence s, int start, int before,
-					int count) {
-			}
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view,
+                                    int position, long id) {
+                if (listener != null) {
+                    Country country = selectedCountriesList.get(position);
+                    listener.onSelectCountry(country.getName(),
+                            country.getCode());
+                }
+            }
+        });
 
-			@Override
-			public void beforeTextChanged(CharSequence s, int start, int count,
-					int after) {
-			}
+        // Search for which countries matched user query
+        searchEditText.addTextChangedListener(new TextWatcher() {
 
-			@Override
-			public void afterTextChanged(Editable s) {
-				search(s.toString());
-			}
-		});
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before,
+                                      int count) {
+            }
 
-		return view;
-	}
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count,
+                                          int after) {
+            }
 
-	/**
-	 * Search allCountriesList contains text and put result into
-	 * selectedCountriesList
-	 * 
-	 * @param text
-	 */
-	@SuppressLint("DefaultLocale")
-	private void search(String text) {
-		selectedCountriesList.clear();
+            @Override
+            public void afterTextChanged(Editable s) {
+                search(s.toString());
+            }
+        });
 
-		for (Country country : allCountriesList) {
-			if (country.getName().toLowerCase(Locale.ENGLISH)
-					.contains(text.toLowerCase())) {
-				selectedCountriesList.add(country);
-			}
-		}
+        return view;
+    }
 
-		adapter.notifyDataSetChanged();
-	}
+    /**
+     * Search allCountriesList contains text and put result into
+     * selectedCountriesList
+     *
+     * @param text
+     */
+    @SuppressLint("DefaultLocale")
+    private void search(String text) {
+        selectedCountriesList.clear();
 
-	/**
-	 * Support sorting the countries list
-	 */
-	@Override
-	public int compare(Country lhs, Country rhs) {
-		return lhs.getName().compareTo(rhs.getName());
-	}
+        for (Country country : allCountriesList) {
+            if (country.getName().toLowerCase(Locale.ENGLISH)
+                    .contains(text.toLowerCase())) {
+                selectedCountriesList.add(country);
+            }
+        }
 
+        adapter.notifyDataSetChanged();
+    }
+
+    /**
+     * Support sorting the countries list
+     */
+    @Override
+    public int compare(Country lhs, Country rhs) {
+        return lhs.getName().compareTo(rhs.getName());
+    }
+
+    public static int getIcon(String country_code) {
+        return getResId("flag_" + country_code.toLowerCase(Locale.ENGLISH));
+    }
+
+    private static int getResId(String drawableName) {
+
+        try {
+            Class<R.drawable> res = R.drawable.class;
+            Field field = res.getField(drawableName);
+            int drawableId = field.getInt(null);
+            return drawableId;
+        } catch (Exception e) {
+            Log.e("COUNTRYPICKER", "Failure to get drawable id.", e);
+        }
+        return -1;
+    }
 }
